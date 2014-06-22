@@ -10,24 +10,35 @@ output: html_document
 The goal of the following analysis is to understand the variables which are important in 
 the data on personal activity with the aim of predicting which class  a group of persons belong to given 
 new data on their personal activity.  
+
 First, we need to clean that data, which has several NAs as entries. We identify the columns in the training 
 data matrix which have a high percentage of NAs and remove those columns from further analysis. Additionally, 
-only those columns which have arm/forearm/dumbbell/belt are retained. 
-In a similar manner, variables from the testing dataset are removed and the variables which are common to the testing 
-and the training datasets are kept for building a prediction model.
+only those columns which have arm/forearm/dumbbell/belt are retained as predictor variables. The accelerometers 
+were installed in these locations and therefore these would be the relevant variables to process.
+In a similar manner to the training data, variables from the testing dataset are removed and the
+variables (53 of them) which are common to the testing and the training datasets are kept for building a prediction model.
+
 Correlation among the variables is explored next, in order to assess multicollinearity and to remove highly correlated 
 variables. Those variable pairs which have a Pearson correlation coefficient of 0.8 or higher are identified. Potentially
-one variable of each pair could be removed. 
-A seed is set using set.seed function, in order that the computation is reproducible.
-A classification and regression tree is built in two ways- 1) doing a preprocessing of the data by centering and scaling the 
-data and 2) without doing the centering and scaling. For the models generated, the importance of the variables is assessed.
+one variable of each pair could be removed.
+
+A seed is set using set.seed function, to ensure that the computation is reproducible.
+A classification and regression tree is built in two ways- 
+1) doing a preprocessing of the data by centering and scaling the data and 
+2) without doing the centering and scaling. For the models generated, the importance of the variables is assessed.
 This identified 14 variables as being important in the prediction.
-Next, two other algorithms namely boosting and Random Forests and used to generate models for prediction. 
-In one approach, all 53 variables are used in the model fitting. In the other approach, 14 variables are used. 
-A confusion matrix enables one to identify how good the predictions are.
+
+Next, two other algorithms namely boosting and Random Forests and used to generate models for prediction. These are 
+chosen because they are robust models for doing prediction on non-linear data.
+In one approach, all 53 variables are used in the model fitting. In the other approach, 14 variables (identified 
+as important from the 'rpart' analysis) are used. 
+Cross validation is done within the Random forest computation using a 3-fold cross-validation. The out of sample
+error is assessed from the confusion matrix. A confusion matrix enables one to identify how good the predictions are.
+
 The result indicates that the prediction accuracy is better in the bigger (53 variable) model than 
 the 14 variable model, but not by much. The choice of variable selection would be a tradeoff between slightly 
-improved accuracy and processing time.
+improved accuracy and processing time. Further refinement of the predictor model might including combining 
+various predictors to reduce the out of sample error while  minimizing overfitting.
 
 
 
@@ -83,39 +94,61 @@ common <- intersect(cn.tr, cn.te)
 ```
 
 
-### Explore correlation among variables
-
-```r
-x <- cor(subset(tr4, select = -classe))
-```
-
-```
-## Error: object 'tr4' not found
-```
-
-```r
-diag(x) <- 0
-```
-
-```
-## Error: object 'x' not found
-```
-
-```r
-which(abs(x) > 0.8, arr.ind = T)
-```
-
-```
-## Error: object 'x' not found
-```
-
 
 ### Variable selection
+The variables which are common to the training and testing datasets are kept for further processing.
 
 ```r
 tr4 <- cbind(tr3[, colnames(tr3) %in% common], classe = tr3$classe)
 te4 <- cbind(te3[, colnames(te3) %in% common], problem_id = te3$problem_id)
 ```
+
+
+### Explore correlation among variables
+Several variables can be correlated. This would affect the model building. Such variables are identified below
+using the 'cor' function using Pearson correlation. Those variable pairs which have a correlation of > 0.8 need
+to be looked at more closely and appropriately removed.
+
+```r
+x <- cor(subset(tr4, select = -classe))
+diag(x) <- 0
+### the correlated variables
+head(which(abs(x) > 0.8, arr.ind = T))
+```
+
+```
+##                  row col
+## yaw_belt           3   1
+## total_accel_belt   4   1
+## accel_belt_y       9   1
+## accel_belt_z      10   1
+## accel_belt_x       8   2
+## magnet_belt_x     11   2
+```
+
+```r
+### Look at a feature plot of response with a few predictors
+six.cols <- rownames(head(which(abs(x) > 0.8, arr.ind = T)))
+tmp1 <- head(data.frame(tr4[, colnames(tr4) %in% six.cols], classe = tr4$classe), 
+    n = 100)
+tmp2 <- tail(data.frame(tr4[, colnames(tr4) %in% six.cols], classe = tr4$classe), 
+    n = 100)
+tmp <- rbind(tmp1, tmp2)
+require(caret)
+```
+
+```
+## Loading required package: caret
+## Loading required package: lattice
+## Loading required package: ggplot2
+```
+
+```r
+featurePlot(y = tmp$classe, x = subset(tmp, select = -classe), plot = "pairs")
+```
+
+![plot of chunk corr](figure/corr.png) 
+
 
 
 ### Fit different models on the data 
@@ -212,7 +245,25 @@ mod.rf.small <- train(classe ~ ., data = tr5, method = "rf", trControl = trainCo
 
 ```r
 pred.gbm <- predict(mod.gbm, te4)
+pred.gbm
+```
+
+```
+##  [1] B A B A A E D B A A B C B A E E A B B B
+## Levels: A B C D E
+```
+
+```r
 pred.rf <- predict(mod.rf, te4)
+pred.rf
+```
+
+```
+##  [1] B A B A A E D B A A B C B A E E A B B B
+## Levels: A B C D E
+```
+
+```r
 pred.rf.oob <- predict(mod.rf.oob, te4)
 ```
 
@@ -222,6 +273,15 @@ pred.rf.oob <- predict(mod.rf.oob, te4)
 
 ```r
 pred.rf.small <- predict(mod.rf.small, te5)
+pred.rf.small
+```
+
+```
+##  [1] B A B A A E D B A A B C B A E E A B B B
+## Levels: A B C D E
+```
+
+```r
 
 ### Look at confusion matrix for prediction done with 53 variables
 confusionMatrix(mod.rf)
